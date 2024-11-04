@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta property="og:title" content="My Personal Word List" />
+    <meta property="og:description" content="A collection of my words" />
+    <meta property="og:image" content="{{url_for('static', filename='logo_red.png')}}" />
+    <link rel="shortcut icon" href="{{url_for('static', filename='favicon.ico')}}" type="image/x-icon" />
+    <link rel="icon" href="{{url_for('static', filename='favicon.ico')}}" type="image/x-icon" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3"
+      crossorigin="anonymous"
+    />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+    <link href='{{ url_for("static", filename="css/style.css") }}' rel="stylesheet">
+    <title>Personal Word List</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.js" integrity="sha256-H+K7U5CnXl1h5ywQfKtSj8PCmoN9aaq30gDh27Xc0jk=" crossorigin="anonymous"></script>
+    <script>
+        let word = '{{ word }}';
+        $(document).ready(function() {
+          get_examples()
+        });
+        function get_definitions() {
+            let api_key = 'c518a916-3fa8-4763-a21c-3d4075f99955';
+            let url = `https://www.dictionaryapi.com/api/v3/references/collegiate/json/${word}?key=${api_key}`;
+            $.ajax({
+                type: 'GET',
+                url: url,
+                data: {},
+                success: function(response) {
+                    let def = response[0];
+                    let category = def.fl;
+                    let shortdef = def.shortdef[0];
+                    let date = def.date;
+                    let temp_html = `
+                      <div style="padding: 10px">
+                        <i>${category}</i>
+                        <br />
+                        ${shortdef}
+                        <br />
+                        <span class="example">${date}</span>
+                      </div>
+                    `;
+                    let container = $('#definition');
+                    container.empty();
+                    container.append(temp_html);
+                }
+            });
+        }
+
+        function save_word() {
+          let defs = {{ definitions | tojson }};
+
+          for (let i = 0; i < defs.length; i++) {
+            let def = defs[i];
+              let category = def.fl
+              let shortdef = def.shortdef[0]
+              let date = def.date
+
+              defs[i] = {
+                category: category,
+                shortdef: shortdef,
+                date: date
+              }
+          }
+          let data = {
+            word_give: word,
+            definitions_give: defs
+          }
+          $.ajax({
+            type: 'POST',
+            url: '/api/save_word',
+            data: JSON.stringify(data),
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            success: function (response) {
+              if (response.result === 'success') {
+                alert(response.msg)
+                window.location.href = `/detail/${word}?status_give=old`;
+              } else {
+                alert('Something went wrong');
+              }
+            }
+          });
+        }
+
+        function delete_word() {
+          if (confirm("Are you sure?") == false) {
+            alert("You pressed Cancel!");
+            return;
+          }
+
+          $.ajax({
+            type: 'POST',
+            url: '/api/delete_word',
+            data: { word_give: word},
+            success: function (response) {
+              if (response.result === 'success') {
+                alert(response.msg)
+                window.location.href = `/detail/${word}?status_give=new`;
+              } else {
+                alert('Something went wrong');
+              }
+            }
+          })
+        }
+
+        function get_examples() {
+          let lists = $("#example-list")
+          lists.empty()
+          $.ajax({
+            type: "GET",
+            url: `/api/get_exs?word=${word}`,
+            data: {},
+            success: function (response) {
+              if (response.result === 'success') {
+                let examples = response.example;
+                let temp_html = '';
+                for (let i = 0; i < examples.length; i++) {
+                  let example = examples[i]
+                  let id = example.id
+                  let sentence = example.example
+                  temp_html += `
+                    <li class="p-2 fs-5 sm-fs-5">${sentence}&nbsp;&nbsp;&nbsp;
+                      <a href="javascript:delete_ex('${id}')" class="text-muted text-decoration-none fs-6">delete</a>
+                    </li>
+                  `;
+                }
+                lists.append(temp_html)
+              }
+            }
+          })
+        }
+
+        function add_ex() {
+          let new_ex = $('#new-example').val()
+          $.ajax({
+            type: "POST",
+            url: '/api/save_ex',
+            data: {
+              example: new_ex,
+              word: word
+            },
+            success: function (response) {
+              if (response.result === 'success') {
+                alert(response.msg)
+                get_examples()
+              }
+            }
+          })
+        }
+
+        function delete_ex(id) {
+          if (confirm(`Deleting this example?`) == false) {
+            alert("You pressed Cancel!");
+            return;
+          }
+
+          $.ajax({
+            type: "POST",
+            url: '/api/delete_ex',
+            data: {
+              word: word,
+              id: id
+            },
+            success: function (response) {
+              if (response.result === 'success') {
+                alert(response.msg)
+                get_examples()
+              }
+            }
+          })
+        }
+    </script>
+  </head>
+  <body>
+
+    <div class="wrap">
+      <div class="banner" onclick="window.location.href = '/'"></div>
+      <div class="container-card">
+        <div class="d-flex justify-content-between align-items-end">
+          <div>
+            <h1 id="word" style="display: inline">{{ word }}</h1>
+          </div>
+          <div class="rounded-2" style="width: 34px; height: 34px; transform: translateX(-10px)">
+            {% if status == 'new' %}
+              <button id="btn-save" class="btn btn-sparta-outline btn-sm" onclick="save_word()">
+                <span style="display: block; width: 24px; height: 24px; margin: 4px auto;">
+                  <svg width="24px" height="24px" viewBox="0 -0.5 21 21" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+                      <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="none">
+                          <g id="Dribbble-Light-Preview" transform="translate(-419.000000, -640.000000)" fill="#E8344E">
+                              <g id="icons" transform="translate(56.000000, 160.000000)">
+                                  <path d="M370.21875,484 C370.21875,483.448 370.68915,483 371.26875,483 C371.84835,483 372.31875,483.448 372.31875,484 C372.31875,484.552 371.84835,485 371.26875,485 C370.68915,485 370.21875,484.552 370.21875,484 L370.21875,484 Z M381.9,497 C381.9,497.552 381.4296,498 380.85,498 L379.8,498 L379.8,494 C379.8,492.895 378.86025,492 377.7,492 L369.3,492 C368.13975,492 367.2,492.895 367.2,494 L367.2,498 L366.15,498 C365.5704,498 365.1,497.552 365.1,497 L365.1,487.044 C365.1,486.911 365.15565,486.784 365.2533,486.691 L367.2,484.837 L367.2,486 C367.2,487.105 368.13975,488 369.3,488 L377.7,488 C378.86025,488 379.8,487.105 379.8,486 L379.8,482 L380.85,482 C381.4296,482 381.9,482.448 381.9,483 L381.9,497 Z M377.7,498 L369.3,498 L369.3,495 C369.3,494.448 369.7704,494 370.35,494 L376.65,494 C377.2296,494 377.7,494.448 377.7,495 L377.7,498 Z M369.3,482.837 L370.17885,482 L377.7,482 L377.7,485 C377.7,485.552 377.2296,486 376.65,486 L370.35,486 C369.7704,486 369.3,485.552 369.3,485 L369.3,482.837 Z M381.9,480 L369.7347,480 C369.45645,480 369.18975,480.105 368.99235,480.293 L363.30765,485.707 C363.11025,485.895 363,486.149 363,486.414 L363,498 C363,499.105 363.93975,500 365.1,500 L381.9,500 C383.06025,500 384,499.105 384,498 L384,482 C384,480.895 383.06025,480 381.9,480 L381.9,480 Z" id="save_item-[#1411]"></path>
+                            </g>
+                        </g>
+                    </g>
+                  </svg>
+                </span>
+              </button>
+            {% elif status == 'old'  %}
+              <button id="btn-delete" class="btn btn-sparta btn-sm" onclick="delete_word()">
+                <span style="display: block; width: 24px; height: 24px; margin: 4px auto;">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#ffffff" class="size-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                  </svg>
+                </span>
+              </button>
+            {% endif %}
+          </div>
+        </div>
+        <hr />
+
+        <div id="definition" class="collapse">
+          {% for def in definitions %}
+            {% set category = def.fl %}
+            {% set shortdef = def.shortdef[0] %}
+            {% set date = def.date %}
+            <div style="padding: 10px">
+              <i>{{ category }}</i>
+              <br />
+              {{ shortdef }}
+              <br />
+              <span class="example">{{ date }}</span>
+            </div>
+          {% endfor %}
+          
+          {% if status == 'old' %}
+            <hr />
+            <div id="examples" class="container my-2">
+              <h3 style="text-align: center; margin-bottom: 1rem">Write your own sentences!</h3>
+              <ul id="example-list"></ul>
+              <div class="d-flex justify-content-between" style="margin-left: 20px">
+                <input id="new-example" class="form-control form-control-sm" style="margin-right: 0.5rem" />
+                <button class="btn btn-outline-secondary btn-sm" onClick="add_ex()">Add</button>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+
+        <div>
+          <button class="btn btn-collapse" type="button" data-bs-toggle="collapse" data-bs-target="#definition" aria-expanded="false" aria-controls="definition">
+             <span class="icon-collapse">
+               <svg class="icon" data-slot="icon" aria-hidden="true" fill="none" stroke-width="1.5" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                 <path d="m19.5 8.25-7.5 7.5-7.5-7.5" stroke-linecap="round" stroke-linejoin="round"></path>
+               </svg>
+             </span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <footer class="py-3 my-4">
+        <ul class="nav justify-content-center border-bottom pb-3 mb-3">
+          <li class="nav-item"><a href="/" class="nav-link px-2 text-muted">Home</a></li>
+        </ul>
+        <p class="text-center text-muted">© 2021 Company, Inc</p>
+      </footer>
+    </div>
+
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p"
+      crossorigin="anonymous"
+    ></script>
+    <script>
+      let btnCollapse = document.querySelector('.btn-collapse');
+      btnCollapse.onclick = () => {
+        btnCollapse.classList.toggle('active')
+      }
+    </script>
+  </body>
+</html>
